@@ -5,4 +5,13 @@
 /*.rbxlx.lock
 /*.rbxl.lock
 
-sourcemap.json
+# Wally lock files and packages
+/Packages
+/ServerPackages
+/wally.lock
+
+# LSP files
+/sourcemap.json
+
+# VSCode files
+.vscode

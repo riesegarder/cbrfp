@@ -1,72 +1,51 @@
 {
   "name": "cbrfp",
+  "servePlaceIds": [
+	94471392697848
+  ],
   "tree": {
     "$className": "DataModel",
 
     "ReplicatedStorage": {
-      "Shared": {
-        "$path": "src/shared"
-      }
-    },
-
-    "ServerScriptService": {
-      "Server": {
-        "$path": "src/server"
-      }
-    },
-
-    "StarterPlayer": {
-      "StarterPlayerScripts": {
-        "Client": {
-          "$path": "src/client"
-        }
-      }
-    },
-
-    "Workspace": {
-      "$properties": {
-        "FilteringEnabled": true
+		"$ignoreUnknownInstances": true,
+      "Source": {
+		"$className": "Folder",
+		"Client": {
+			"$className": "Folder",
+			"$path": "src/Modules/Client"
+		},
+		"Shared": {
+			"$className": "Folder",
+			"$path": "src/Modules/Shared"
+		}
       },
-      "Baseplate": {
-        "$className": "Part",
-        "$properties": {
-          "Anchored": true,
-          "Color": [
-            0.38823,
-            0.37254,
-            0.38823
-          ],
-          "Locked": true,
-          "Position": [
-            0,
-            -10,
-            0
-          ],
-          "Size": [
-            512,
-            20,
-            512
-          ]
-        }
-      }
+	  "Packages": {
+		"$className": "Folder",
+		"$path": "Packages"
+	  }
     },
-    "Lighting": {
-      "$properties": {
-        "Ambient": [
-          0,
-          0,
-          0
-        ],
-        "Brightness": 2,
-        "GlobalShadows": true,
-        "Outlines": false,
-        "Technology": "Voxel"
-      }
+
+    "ServerStorage": {
+		"$ignoreUnknownInstances": true,
+      "Source": {
+		"$className": "Folder",
+		"Server": {
+			"$className": "Folder",
+			"$path": "src/Modules/Server"
+		}
+      },
+	  "ServerPackages": {
+		"$className": "Folder",
+		"$path": "ServerPackages"
+	  }
     },
-    "SoundService": {
-      "$properties": {
-        "RespectFilteringEnabled": true
-      }
-    }
+
+	"ReplicatedFirst": {
+		"$path": "src/Scripts/Client"
+	},
+
+	"ServerScriptService": {
+		"$path": "src/Scripts/Server"
+	}
   }
 }

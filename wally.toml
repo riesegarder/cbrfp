@@ -1,0 +1,11 @@
+[package]
+name = "riesegarder/cbrfp"
+version = "1.0.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[server-dependencies]
+ProfileStore="lm-loleris/profilestore@1.0.2"
+
+[dependencies]
+Loader = "sleitnick/loader@2.0.0"
