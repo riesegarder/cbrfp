@@ -6,6 +6,13 @@
   "tree": {
     "$className": "DataModel",
 
+	"Players": {
+		"$className": "Players",
+		"$properties": {
+			"CharacterAutoLoads": false
+		}
+	},
+
     "ReplicatedStorage": {
 		"$ignoreUnknownInstances": true,
       "Source": {
