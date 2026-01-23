@@ -1,8 +1,9 @@
 {
-  "name": "cbrfp",
+  "name": "CBEngine",
   "servePlaceIds": [
 	94471392697848
   ],
+  "servePort": 7593,
   "tree": {
     "$className": "DataModel",
 
