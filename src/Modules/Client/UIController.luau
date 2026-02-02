@@ -1,5 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ItemEntity = require(ReplicatedStorage.Source.Shared.ItemEntity)
+
 local UIController = {}
 local SCALE = 50
 
@@ -178,7 +180,7 @@ function UIController._renderMap(map)
 end
 
 -- Efficient function to update only counter items without re-rendering entire map
-function UIController._updateCounterItems(map)
+function UIController._updateCounterItems(map, itemEntities)
 	-- First, clear ALL existing counter item frames to prevent duplication
 	for counterId, itemFrame in counterItemFrames do
 		if itemFrame then
@@ -188,15 +190,18 @@ function UIController._updateCounterItems(map)
 	counterItemFrames = {}
 
 	-- Then add item frames for counters that have items
-	for counterId, counterItem in map.counterStates do
+	for counterId, itemId in map.counterStates do
 		local counterFrame = counterFrames[counterId]
-		if counterFrame and counterItem then
-			counterItemFrames[counterId] = createItemFrame(counterItem, counterFrame)
+		if counterFrame and itemId then
+			-- Look up entity type from ID
+			local entity = ItemEntity.get(itemEntities, itemId)
+			local itemType = entity and entity.type or `Item#{itemId}`
+			counterItemFrames[counterId] = createItemFrame(itemType, counterFrame)
 		end
 	end
 end
 
-function UIController._renderWorldState(ws: any)
+function UIController._renderWorldState(ws: any, itemEntities)
 	if lastws == nil then
 		gui.Enabled = true
 	end
@@ -220,11 +225,15 @@ function UIController._renderWorldState(ws: any)
 		-- Handle held item display
 		local existingItemFrame = playerFrame:FindFirstChild("HeldItem")
 		if simState.heldItem then
+			-- Look up entity type from ID
+			local entity = ItemEntity.get(itemEntities, simState.heldItem)
+			local itemType = entity and entity.type or `Item#{simState.heldItem}`
+
 			if not existingItemFrame then
-				existingItemFrame = createItemFrame(simState.heldItem, playerFrame)
+				existingItemFrame = createItemFrame(itemType, playerFrame)
 				existingItemFrame.Name = "HeldItem"
 			else
-				existingItemFrame.TextLabel.Text = simState.heldItem
+				existingItemFrame.TextLabel.Text = itemType
 			end
 		else
 			if existingItemFrame then
@@ -234,7 +243,7 @@ function UIController._renderWorldState(ws: any)
 	end
 end
 
-function UIController._renderLocalState(sim: any)
+function UIController._renderLocalState(sim: any, itemEntities)
 	if not ownFrame then
 		local newPlayerFrame = playerFramePrefab:Clone()
 		newPlayerFrame.Name = "SELF"
@@ -249,11 +258,15 @@ function UIController._renderLocalState(sim: any)
 	-- Handle held item display for local player
 	local existingItemFrame = ownFrame:FindFirstChild("HeldItem")
 	if sim.state.heldItem then
+		-- Look up entity type from ID
+		local entity = ItemEntity.get(itemEntities, sim.state.heldItem)
+		local itemType = entity and entity.type or `Item#{sim.state.heldItem}`
+
 		if not existingItemFrame then
-			existingItemFrame = createItemFrame(sim.state.heldItem, ownFrame)
+			existingItemFrame = createItemFrame(itemType, ownFrame)
 			existingItemFrame.Name = "HeldItem"
 		else
-			existingItemFrame.TextLabel.Text = sim.state.heldItem
+			existingItemFrame.TextLabel.Text = itemType
 		end
 	else
 		if existingItemFrame then

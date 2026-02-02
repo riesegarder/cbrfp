@@ -6,6 +6,7 @@ local CharacterController = require(ReplicatedStorage.Source.Client.CharacterCon
 local UIController = require(ReplicatedStorage.Source.Client.UIController)
 local Simulation = require(ReplicatedStorage.Source.Shared.Simulation)
 local Map = require(ReplicatedStorage.Source.Shared.Map)
+local ItemEntity = require(ReplicatedStorage.Source.Shared.ItemEntity)
 
 local GameClient = {}
 
@@ -16,9 +17,20 @@ local pendingCommands = {}
 local stateCache = {}
 local gameMap, sim
 
+-- Client-side entity management for prediction
+local itemEntities = {} -- Local entity registry
+local nextNegativeId = -1 -- Client uses negative IDs for prediction
+
 function GameClient._onWorldStateReceived(worldState: any)
 	local players = worldState.players or worldState -- Handle both old and new format
 	local counterStates = worldState.counterStates
+	local serverItemEntities = worldState.itemEntities
+
+	-- Sync item entities from server (authoritative)
+	if serverItemEntities then
+		-- Clear local entities and replace with server's authoritative state
+		itemEntities = table.clone(serverItemEntities)
+	end
 
 	-- CRITICAL: Properly sync counter states from server
 	-- Clear ALL counter states first, then set from server to handle both additions and removals
@@ -28,8 +40,8 @@ function GameClient._onWorldStateReceived(worldState: any)
 			gameMap.counterStates[counterId] = nil
 		end
 		-- Then set counter states from server (including nil/empty counters)
-		for counterId, serverItem in counterStates do
-			gameMap.counterStates[counterId] = serverItem
+		for counterId, serverItemId in counterStates do
+			gameMap.counterStates[counterId] = serverItemId
 		end
 	end
 
@@ -60,8 +72,8 @@ function GameClient._onWorldStateReceived(worldState: any)
 				gameMap.counterStates[counterId] = nil
 			end
 			-- Then apply server's authoritative state
-			for counterId, serverItem in counterStates do
-				gameMap.counterStates[counterId] = serverItem
+			for counterId, serverItemId in counterStates do
+				gameMap.counterStates[counterId] = serverItemId
 			end
 		end
 
@@ -85,7 +97,7 @@ function GameClient._onWorldStateReceived(worldState: any)
 			-- Reset to server state
 			sim:read(lastReceivedServerState)
 
-			-- Replay remaining commands in order
+			-- Replay remaining commands in order with entity prediction
 			local framesToReplay = {}
 			for frameNumber, _ in pairs(pendingCommands) do
 				table.insert(framesToReplay, frameNumber)
@@ -93,7 +105,22 @@ function GameClient._onWorldStateReceived(worldState: any)
 			table.sort(framesToReplay)
 
 			for _, frameNumber in ipairs(framesToReplay) do
-				sim:processCommand(pendingCommands[frameNumber], gameMap.counterStates)
+				-- Client-side entity creation callback (uses negative IDs)
+				local function createPredictedEntity(itemType: string): number
+					local predictedEntity = ItemEntity.create(nextNegativeId, itemType, 0)
+					ItemEntity.add(itemEntities, predictedEntity)
+					local createdId = nextNegativeId
+					nextNegativeId -= 1
+					print(`[CLIENT PREDICT] Created entity #{createdId} of type {itemType}`)
+					return createdId
+				end
+
+				sim:processCommand(
+					pendingCommands[frameNumber],
+					gameMap.counterStates,
+					itemEntities,
+					createPredictedEntity
+				)
 			end
 		end
 
@@ -110,10 +137,10 @@ function GameClient._onWorldStateReceived(worldState: any)
 
 	-- Update counter states without re-rendering entire map
 	if counterStates and gameMap then
-		UIController._updateCounterItems(gameMap)
+		UIController._updateCounterItems(gameMap, itemEntities)
 	end
 
-	UIController._renderWorldState(players)
+	UIController._renderWorldState(players, itemEntities)
 end
 
 function GameClient.Start()
@@ -131,8 +158,18 @@ function GameClient.Start()
 		pendingCommands[sim.state.frame] = cmd
 		stateCache[sim.state.frame] = sim:write()
 
-		sim:processCommand(cmd, gameMap.counterStates)
-		UIController._renderLocalState(sim)
+		-- Client-side entity creation callback (uses negative IDs)
+		local function createPredictedEntity(itemType: string): number
+			local predictedEntity = ItemEntity.create(nextNegativeId, itemType, 0)
+			ItemEntity.add(itemEntities, predictedEntity)
+			local createdId = nextNegativeId
+			nextNegativeId -= 1
+			print(`[CLIENT PREDICT] Created entity #{createdId} of type {itemType}`)
+			return createdId
+		end
+
+		sim:processCommand(cmd, gameMap.counterStates, itemEntities, createPredictedEntity)
+		UIController._renderLocalState(sim, itemEntities)
 		cmdRemote:FireServer(cmd)
 	end)
 

@@ -14,7 +14,14 @@ type Box = {
 	rotation: number, -- degrees, CCW
 }
 type MapShape = Circle | Box
-type IngredientBox = (Circle | Box) & { ingredientName: string? }
+type IngredientBox = {
+	shape: "Circle" | "Box",
+	position: Vector2,
+	radius: number?,
+	size: Vector2?,
+	rotation: number?,
+	ingredientName: string?,
+}
 type SpawnMarker = {
 	team: string,
 	position: Vector2,
@@ -26,7 +33,7 @@ type MapData = {
 	counters: { [string]: MapShape },
 	ingredientBoxes: { [string]: IngredientBox },
 	spawns: { [string]: SpawnMarker },
-	counterStates: { [string]: string? }, -- Track what item is on each counter
+	counterStates: { [string]: number? }, -- Track what item ID is on each counter
 }
 
 local Map = {}
@@ -40,9 +47,9 @@ function Map.new(mapModel: Instance): MapType
 	local baseCFrame = mapBase.CFrame
 	local shapes: { [string]: MapShape } = {}
 	local counters: { [string]: MapShape } = {}
-	local ingredientBoxes: { [string]: MapShape } = {}
+	local ingredientBoxes: { [string]: IngredientBox } = {}
 	local spawns: { [string]: SpawnMarker } = {}
-	local counterStates: { [string]: string? } = {}
+	local counterStates: { [string]: number? } = {}
 
 	-- Helper function to create a shape from a part
 	local function createShapeFromPart(part: BasePart, namePrefix: string, counter: number): MapShape?
@@ -91,13 +98,13 @@ function Map.new(mapModel: Instance): MapType
 		local countersFolder = interactables:FindFirstChild("Counters")
 		if countersFolder then
 			-- Sort parts by name for deterministic ordering
-			local counterParts = {}
+			local counterParts: { BasePart } = {}
 			for _, counterPart in countersFolder:GetChildren() do
 				if counterPart:IsA("BasePart") then
 					table.insert(counterParts, counterPart)
 				end
 			end
-			table.sort(counterParts, function(a, b)
+			table.sort(counterParts, function(a: BasePart, b: BasePart)
 				return a.Name < b.Name
 			end)
 
@@ -349,7 +356,19 @@ function Map.sweepCircle(
 
 		-- Ingredient box shapes
 		for _, shape in map.ingredientBoxes do
-			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, shape)
+			local mapShape: MapShape = if shape.shape == "Circle"
+				then {
+					shape = "Circle",
+					position = shape.position,
+					radius = shape.radius or 0,
+				}
+				else {
+					shape = "Box",
+					position = shape.position,
+					size = shape.size or Vector2.zero,
+					rotation = shape.rotation or 0,
+				}
+			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, mapShape)
 			if hit and t < minT then
 				minT = t
 				hitNormal = normal
@@ -381,17 +400,17 @@ function Map.sweepCircle(
 end
 
 -- Counter state management methods
-function Map.setCounterItem(map: MapType, counterId: string, item: string?)
+function Map.setCounterItem(map: MapType, counterId: string, itemId: number?)
 	if map.counterStates[counterId] ~= nil then -- Counter exists
-		map.counterStates[counterId] = item
+		map.counterStates[counterId] = itemId
 	end
 end
 
-function Map.getCounterItem(map: MapType, counterId: string): string?
+function Map.getCounterItem(map: MapType, counterId: string): number?
 	return map.counterStates[counterId]
 end
 
-function Map.getCounterStates(map: MapType): { [string]: string? }
+function Map.getCounterStates(map: MapType): { [string]: number? }
 	return map.counterStates
 end
 

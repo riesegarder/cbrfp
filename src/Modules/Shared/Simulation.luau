@@ -1,6 +1,9 @@
 local Simulation = {}
 Simulation.__index = Simulation
 
+local ItemEntity = require(script.Parent.ItemEntity)
+type ItemEntityRegistry = ItemEntity.ItemEntityRegistry
+
 local Interface = {}
 function Interface.new(map)
 	local self = {
@@ -11,7 +14,7 @@ function Interface.new(map)
 			t = 0,
 			frame = 0,
 			rotation = 0,
-			heldItem = nil,
+			heldItem = nil, -- Now stores item ID (number?) instead of item name
 			lastInteractState = false, -- Track previous interact state
 		},
 		map = map,
@@ -20,7 +23,7 @@ function Interface.new(map)
 	return self
 end
 
-function Simulation.processCommand(self, cmd, counterStates)
+function Simulation.processCommand(self, cmd, counterStates, itemEntities, createEntityCallback)
 	-- Use provided counterStates or fall back to map's (for client compatibility)
 	local activeCounterStates = counterStates or self.map.counterStates
 
@@ -37,7 +40,7 @@ function Simulation.processCommand(self, cmd, counterStates)
 
 	-- Handle interaction (only on key press, not while held)
 	if cmd.interact and not self.state.lastInteractState then
-		self:processInteraction(activeCounterStates)
+		self:processInteraction(activeCounterStates, itemEntities, createEntityCallback)
 	end
 	self.state.lastInteractState = cmd.interact
 
@@ -93,7 +96,7 @@ function Simulation.findInteractable(self): (string?, string?) -- returns (type,
 end
 
 -- Process interaction with the nearest valid target
-function Simulation.processInteraction(self, counterStates)
+function Simulation.processInteraction(self, counterStates, itemEntities, createEntityCallback)
 	local interactType, interactId = self:findInteractable()
 
 	if interactType == "ingredient" then
@@ -101,38 +104,52 @@ function Simulation.processInteraction(self, counterStates)
 		if not self.state.heldItem then
 			local ingredientBox = self.map.ingredientBoxes[interactId]
 			if ingredientBox and ingredientBox.ingredientName then
-				self.state.heldItem = ingredientBox.ingredientName
-				print(`Picked up {ingredientBox.ingredientName}`)
+				-- Create a new item entity via callback
+				if createEntityCallback then
+					local newItemId = createEntityCallback(ingredientBox.ingredientName)
+					self.state.heldItem = newItemId
+					print(`Picked up new {ingredientBox.ingredientName} with ID {newItemId}`)
+				end
 			end
 		end
 	elseif interactType == "counter" then
 		-- Counter interaction: pickup or place
-		local currentItem = counterStates[interactId]
+		local currentItemId = counterStates[interactId]
 
 		if self.state.heldItem then
 			-- Character holding something: place it on counter (if counter is empty)
-			if not currentItem then
-				print(`[BEFORE PLACE] Character holding: {self.state.heldItem}, Counter {interactId}: {currentItem}`)
+			if not currentItemId then
+				local itemEntity = ItemEntity.get(itemEntities, self.state.heldItem)
+				local itemType = itemEntity and itemEntity.type or "Unknown"
+				print(
+					`[BEFORE PLACE] Character holding: Item#{self.state.heldItem} ({itemType}), Counter {interactId}: {currentItemId}`
+				)
 				counterStates[interactId] = self.state.heldItem
-				local itemToPlace = self.state.heldItem
+				local itemIdToPlace = self.state.heldItem
 				self.state.heldItem = nil
 				print(
 					`[AFTER PLACE] Character holding: {self.state.heldItem}, Counter {interactId}: {counterStates[interactId]}`
 				)
-				print(`Placed {itemToPlace} on counter {interactId}`)
+				print(`Placed Item#{itemIdToPlace} ({itemType}) on counter {interactId}`)
 			else
-				print(`Cannot place - counter {interactId} already has: {currentItem}`)
+				local currentEntity = ItemEntity.get(itemEntities, currentItemId)
+				local currentType = currentEntity and currentEntity.type or "Unknown"
+				print(`Cannot place - counter {interactId} already has: Item#{currentItemId} ({currentType})`)
 			end
 		else
 			-- Character not holding anything: pick up from counter (if counter has something)
-			if currentItem then
-				print(`[BEFORE PICKUP] Character holding: {self.state.heldItem}, Counter {interactId}: {currentItem}`)
-				self.state.heldItem = currentItem
+			if currentItemId then
+				local itemEntity = ItemEntity.get(itemEntities, currentItemId)
+				local itemType = itemEntity and itemEntity.type or "Unknown"
+				print(
+					`[BEFORE PICKUP] Character holding: {self.state.heldItem}, Counter {interactId}: Item#{currentItemId} ({itemType})`
+				)
+				self.state.heldItem = currentItemId
 				counterStates[interactId] = nil
 				print(
-					`[AFTER PICKUP] Character holding: {self.state.heldItem}, Counter {interactId}: {counterStates[interactId]}`
+					`[AFTER PICKUP] Character holding: Item#{self.state.heldItem}, Counter {interactId}: {counterStates[interactId]}`
 				)
-				print(`Picked up {currentItem} from counter {interactId}`)
+				print(`Picked up Item#{currentItemId} ({itemType}) from counter {interactId}`)
 			else
 				print(`Cannot pickup - counter {interactId} is empty`)
 			end
