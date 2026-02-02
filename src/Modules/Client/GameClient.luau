@@ -20,10 +20,16 @@ function GameClient._onWorldStateReceived(worldState: any)
 	local players = worldState.players or worldState -- Handle both old and new format
 	local counterStates = worldState.counterStates
 
-	-- Update map counter states if provided
+	-- CRITICAL: Properly sync counter states from server
+	-- Clear ALL counter states first, then set from server to handle both additions and removals
 	if counterStates and gameMap then
-		for counterId, item in counterStates do
-			gameMap.counterStates[counterId] = item
+		-- First, clear all existing counter states
+		for counterId, _ in gameMap.counters do
+			gameMap.counterStates[counterId] = nil
+		end
+		-- Then set counter states from server (including nil/empty counters)
+		for counterId, serverItem in counterStates do
+			gameMap.counterStates[counterId] = serverItem
 		end
 	end
 
@@ -49,6 +55,11 @@ function GameClient._onWorldStateReceived(worldState: any)
 
 		-- IMPORTANT: Always reset counter states to server state to prevent duplication
 		if counterStates and gameMap then
+			-- Clear all counter states first
+			for counterId, _ in gameMap.counters do
+				gameMap.counterStates[counterId] = nil
+			end
+			-- Then apply server's authoritative state
 			for counterId, serverItem in counterStates do
 				gameMap.counterStates[counterId] = serverItem
 			end
@@ -82,7 +93,7 @@ function GameClient._onWorldStateReceived(worldState: any)
 			table.sort(framesToReplay)
 
 			for _, frameNumber in ipairs(framesToReplay) do
-				sim:processCommand(pendingCommands[frameNumber])
+				sim:processCommand(pendingCommands[frameNumber], gameMap.counterStates)
 			end
 		end
 
@@ -120,7 +131,7 @@ function GameClient.Start()
 		pendingCommands[sim.state.frame] = cmd
 		stateCache[sim.state.frame] = sim:write()
 
-		sim:processCommand(cmd)
+		sim:processCommand(cmd, gameMap.counterStates)
 		UIController._renderLocalState(sim)
 		cmdRemote:FireServer(cmd)
 	end)

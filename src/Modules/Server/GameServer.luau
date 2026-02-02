@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Simulation = require(ReplicatedStorage.Source.Shared.Simulation)
-local RunService = game:GetService("RunService")
 local Map = require(ReplicatedStorage.Source.Shared.Map)
 
 local GameTest = {}
@@ -51,7 +50,7 @@ function GameTest.Start()
 			task.wait(1 / 20)
 			local worldState = {
 				players = playerRecords,
-				counterStates = gameMap.counterStates,
+				counterStates = counterStates, -- Send the global counter states, not map's
 			}
 			wsRemote:FireAllClients(worldState)
 		end
