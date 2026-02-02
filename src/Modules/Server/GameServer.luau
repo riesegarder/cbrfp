@@ -8,6 +8,7 @@ local GameTest = {}
 local playerRecords = {}
 local gameMap = Map.new(workspace.Map)
 local counterStates = {} -- Global counter states, separate from map
+local choppingBoardStates = {} -- Global chopping board states
 local itemEntities = {} -- Item entity registry (authoritative on server)
 local nextItemId = 1 -- Server-authoritative ID counter
 
@@ -26,6 +27,11 @@ function GameTest.Init()
 	-- Initialize counter states
 	for counterId, _ in gameMap.counters do
 		counterStates[counterId] = nil
+	end
+
+	-- Initialize chopping board states
+	for boardId, _ in gameMap.choppingBoards do
+		choppingBoardStates[boardId] = nil
 	end
 
 	for _, player in Players:GetPlayers() do
@@ -50,7 +56,13 @@ function GameTest.Init()
 		end
 
 		-- Pass counter states, item entities, and create callback to the simulation
-		playerRecords[tostring(player.UserId)].simulation:processCommand(cmd, counterStates, itemEntities, createEntity)
+		playerRecords[tostring(player.UserId)].simulation:processCommand(
+			cmd,
+			counterStates,
+			itemEntities,
+			createEntity,
+			choppingBoardStates
+		)
 	end)
 end
 
@@ -62,6 +74,7 @@ function GameTest.Start()
 			local worldState = {
 				players = playerRecords,
 				counterStates = counterStates, -- Send the global counter states
+				choppingBoardStates = choppingBoardStates, -- Send chopping board states
 				itemEntities = itemEntities, -- Send all item entities
 			}
 			wsRemote:FireAllClients(worldState)

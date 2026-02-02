@@ -24,6 +24,8 @@ local playerFrames = {}
 local ownFrame = nil
 local counterItemFrames = {} -- Track item frames on counters
 local counterFrames = {} -- Track counter frames for efficient updates
+local choppingBoardItemFrames = {} -- Track item frames on chopping boards
+local choppingBoardFrames = {} -- Track chopping board frames for efficient updates
 
 -- Helper function to create item display frame
 local function createItemFrame(itemName: string, parent: GuiObject): Frame
@@ -114,6 +116,30 @@ function UIController._renderMap(map)
 		end
 	end
 
+	-- Render chopping boards (orange)
+	for id, objData in map.choppingBoards do
+		local boardFrame = Instance.new("Frame")
+		local stroke = Instance.new("UIStroke", boardFrame)
+		boardFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+		boardFrame.Position = UDim2.fromOffset(objData.position.X * SCALE, -objData.position.Y * SCALE)
+		boardFrame.BackgroundColor3 = Color3.fromRGB(255, 150, 100) -- Orange color
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+
+		if objData.shape == "Circle" then
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(1, 1)
+			corner.Parent = boardFrame
+			boardFrame.Size = UDim2.fromOffset(objData.radius * 2 * SCALE, objData.radius * 2 * SCALE)
+		elseif objData.shape == "Box" then
+			boardFrame.Rotation = -objData.rotation
+			boardFrame.Size = UDim2.fromOffset(objData.size.X * SCALE, objData.size.Y * SCALE)
+		end
+
+		boardFrame.Parent = mapFrame
+		choppingBoardFrames[id] = boardFrame -- Store reference for efficient updates
+		print(`RENDERED CHOPPING BOARD: {id}, {boardFrame:GetFullName()}`)
+	end
+
 	-- Render ingredient boxes (green) with labels
 	for id, objData in map.ingredientBoxes do
 		local frame = Instance.new("Frame")
@@ -197,6 +223,63 @@ function UIController._updateCounterItems(map, itemEntities)
 			local entity = ItemEntity.get(itemEntities, itemId)
 			local itemType = entity and entity.type or `Item#{itemId}`
 			counterItemFrames[counterId] = createItemFrame(itemType, counterFrame)
+		end
+	end
+end
+
+-- Helper function to create a progress bar
+local function createProgressBar(parent: GuiObject, percentage: number): Frame
+	local barContainer = Instance.new("Frame")
+	barContainer.Size = UDim2.fromOffset(30, 4)
+	barContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+	barContainer.Position = UDim2.fromScale(0.5, 0.65) -- Below the item
+	barContainer.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	barContainer.BorderSizePixel = 0
+	barContainer.ZIndex = 12
+
+	local barFill = Instance.new("Frame")
+	barFill.Size = UDim2.fromScale(math.clamp(percentage, 0, 1), 1)
+	barFill.Position = UDim2.fromScale(0, 0)
+	barFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green progress
+	barFill.BorderSizePixel = 0
+	barFill.ZIndex = 13
+	barFill.Parent = barContainer
+
+	local barStroke = Instance.new("UIStroke", barContainer)
+	barStroke.Color = Color3.fromRGB(0, 0, 0)
+	barStroke.Thickness = 1
+
+	barContainer.Parent = parent
+	return barContainer
+end
+
+-- Efficient function to update chopping board items with progress bars
+function UIController._updateChoppingBoardItems(map, itemEntities)
+	-- First, clear ALL existing chopping board item frames to prevent duplication
+	for boardId, itemFrame in choppingBoardItemFrames do
+		if itemFrame then
+			itemFrame:Destroy()
+		end
+	end
+	choppingBoardItemFrames = {}
+
+	-- Then add item frames for chopping boards that have items
+	for boardId, itemId in map.choppingBoardStates do
+		local boardFrame = choppingBoardFrames[boardId]
+		if boardFrame and itemId then
+			-- Look up entity from ID
+			local entity = ItemEntity.get(itemEntities, itemId)
+			if entity then
+				local itemType = entity.type
+				local itemFrame = createItemFrame(itemType, boardFrame)
+				choppingBoardItemFrames[boardId] = itemFrame
+
+				-- Add progress bar if item has chopping progress
+				local choppedPercentage = entity.choppedPercentage or 0
+				if choppedPercentage > 0 then
+					createProgressBar(itemFrame, choppedPercentage)
+				end
+			end
 		end
 	end
 end

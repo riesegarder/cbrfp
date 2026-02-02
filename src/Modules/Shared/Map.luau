@@ -31,9 +31,11 @@ type SpawnMarker = {
 type MapData = {
 	shapes: { [string]: MapShape },
 	counters: { [string]: MapShape },
+	choppingBoards: { [string]: MapShape },
 	ingredientBoxes: { [string]: IngredientBox },
 	spawns: { [string]: SpawnMarker },
 	counterStates: { [string]: number? }, -- Track what item ID is on each counter
+	choppingBoardStates: { [string]: number? }, -- Track what item ID is on each chopping board
 }
 
 local Map = {}
@@ -47,9 +49,11 @@ function Map.new(mapModel: Instance): MapType
 	local baseCFrame = mapBase.CFrame
 	local shapes: { [string]: MapShape } = {}
 	local counters: { [string]: MapShape } = {}
+	local choppingBoards: { [string]: MapShape } = {}
 	local ingredientBoxes: { [string]: IngredientBox } = {}
 	local spawns: { [string]: SpawnMarker } = {}
 	local counterStates: { [string]: number? } = {}
+	local choppingBoardStates: { [string]: number? } = {}
 
 	-- Helper function to create a shape from a part
 	local function createShapeFromPart(part: BasePart, namePrefix: string, counter: number): MapShape?
@@ -142,6 +146,36 @@ function Map.new(mapModel: Instance): MapType
 				end
 			end
 		end
+
+		-- Process Stations (Chopping Boards, etc.)
+		local stationsFolder = interactables:FindFirstChild("Stations")
+		if stationsFolder then
+			-- Process Chopping Boards
+			local choppingBoardParts: { BasePart } = {}
+			for _, stationPart in stationsFolder:GetChildren() do
+				if stationPart:IsA("BasePart") and stationPart.Name == "ChoppingBoard" then
+					table.insert(choppingBoardParts, stationPart)
+				end
+			end
+			table.sort(choppingBoardParts, function(a: BasePart, b: BasePart)
+				return a.Name < b.Name
+			end)
+
+			local boardCount = 0
+			for _, boardPart in choppingBoardParts do
+				boardCount += 1
+				local shape = createShapeFromPart(boardPart, "ChoppingBoard", boardCount)
+				if shape then
+					-- Use deterministic ID based on name and position
+					local localCFrame = baseCFrame:ToObjectSpace(boardPart.CFrame)
+					local pos2D = Vector2.new(localCFrame.Position.X, -localCFrame.Position.Z)
+					local boardId = `ChoppingBoard_{math.floor(pos2D.X * 100)}_{math.floor(pos2D.Y * 100)}`
+					choppingBoards[boardId] = shape
+					choppingBoardStates[boardId] = nil -- Initialize as empty
+					print(`Added chopping board: {boardId}`)
+				end
+			end
+		end
 	end
 
 	-- Process Markers (Spawns)
@@ -187,15 +221,18 @@ function Map.new(mapModel: Instance): MapType
 	print("Map loaded:")
 	print("- Shapes:", shapes)
 	print("- Counters:", counters)
+	print("- Chopping Boards:", choppingBoards)
 	print("- IngredientBoxes:", ingredientBoxes)
 	print("- Spawns:", spawns)
 
 	return setmetatable({
 		shapes = shapes,
 		counters = counters,
+		choppingBoards = choppingBoards,
 		ingredientBoxes = ingredientBoxes,
 		spawns = spawns,
 		counterStates = counterStates,
+		choppingBoardStates = choppingBoardStates,
 	}, Map)
 end
 
@@ -354,6 +391,16 @@ function Map.sweepCircle(
 			end
 		end
 
+		-- Chopping board shapes
+		for _, shape in map.choppingBoards do
+			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, shape)
+			if hit and t < minT then
+				minT = t
+				hitNormal = normal
+				anyCollision = true
+			end
+		end
+
 		-- Ingredient box shapes
 		for _, shape in map.ingredientBoxes do
 			local mapShape: MapShape = if shape.shape == "Circle"
@@ -412,6 +459,21 @@ end
 
 function Map.getCounterStates(map: MapType): { [string]: number? }
 	return map.counterStates
+end
+
+-- Chopping board state management methods
+function Map.setChoppingBoardItem(map: MapType, boardId: string, itemId: number?)
+	if map.choppingBoardStates[boardId] ~= nil then -- Board exists
+		map.choppingBoardStates[boardId] = itemId
+	end
+end
+
+function Map.getChoppingBoardItem(map: MapType, boardId: string): number?
+	return map.choppingBoardStates[boardId]
+end
+
+function Map.getChoppingBoardStates(map: MapType): { [string]: number? }
+	return map.choppingBoardStates
 end
 
 return Map

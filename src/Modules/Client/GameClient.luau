@@ -24,6 +24,7 @@ local nextNegativeId = -1 -- Client uses negative IDs for prediction
 function GameClient._onWorldStateReceived(worldState: any)
 	local players = worldState.players or worldState -- Handle both old and new format
 	local counterStates = worldState.counterStates
+	local choppingBoardStates = worldState.choppingBoardStates
 	local serverItemEntities = worldState.itemEntities
 
 	-- Sync item entities from server (authoritative)
@@ -42,6 +43,18 @@ function GameClient._onWorldStateReceived(worldState: any)
 		-- Then set counter states from server (including nil/empty counters)
 		for counterId, serverItemId in counterStates do
 			gameMap.counterStates[counterId] = serverItemId
+		end
+	end
+
+	-- Sync chopping board states from server
+	if choppingBoardStates and gameMap then
+		-- First, clear all existing chopping board states
+		for boardId, _ in gameMap.choppingBoards do
+			gameMap.choppingBoardStates[boardId] = nil
+		end
+		-- Then set chopping board states from server
+		for boardId, serverItemId in choppingBoardStates do
+			gameMap.choppingBoardStates[boardId] = serverItemId
 		end
 	end
 
@@ -74,6 +87,16 @@ function GameClient._onWorldStateReceived(worldState: any)
 			-- Then apply server's authoritative state
 			for counterId, serverItemId in counterStates do
 				gameMap.counterStates[counterId] = serverItemId
+			end
+		end
+
+		-- Reset chopping board states to server state
+		if choppingBoardStates and gameMap then
+			for boardId, _ in gameMap.choppingBoards do
+				gameMap.choppingBoardStates[boardId] = nil
+			end
+			for boardId, serverItemId in choppingBoardStates do
+				gameMap.choppingBoardStates[boardId] = serverItemId
 			end
 		end
 
@@ -119,7 +142,8 @@ function GameClient._onWorldStateReceived(worldState: any)
 					pendingCommands[frameNumber],
 					gameMap.counterStates,
 					itemEntities,
-					createPredictedEntity
+					createPredictedEntity,
+					gameMap.choppingBoardStates
 				)
 			end
 		end
@@ -138,6 +162,11 @@ function GameClient._onWorldStateReceived(worldState: any)
 	-- Update counter states without re-rendering entire map
 	if counterStates and gameMap then
 		UIController._updateCounterItems(gameMap, itemEntities)
+	end
+
+	-- Update chopping board items
+	if choppingBoardStates and gameMap then
+		UIController._updateChoppingBoardItems(gameMap, itemEntities)
 	end
 
 	UIController._renderWorldState(players, itemEntities)
@@ -168,7 +197,7 @@ function GameClient.Start()
 			return createdId
 		end
 
-		sim:processCommand(cmd, gameMap.counterStates, itemEntities, createPredictedEntity)
+		sim:processCommand(cmd, gameMap.counterStates, itemEntities, createPredictedEntity, gameMap.choppingBoardStates)
 		UIController._renderLocalState(sim, itemEntities)
 		cmdRemote:FireServer(cmd)
 	end)
