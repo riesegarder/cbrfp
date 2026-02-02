@@ -14,8 +14,19 @@ type Box = {
 	rotation: number, -- degrees, CCW
 }
 type MapShape = Circle | Box
+type IngredientBox = (Circle | Box) & { ingredientName: string? }
+type SpawnMarker = {
+	team: string,
+	position: Vector2,
+	rotation: number,
+}
+
 type MapData = {
 	shapes: { [string]: MapShape },
+	counters: { [string]: MapShape },
+	ingredientBoxes: { [string]: IngredientBox },
+	spawns: { [string]: SpawnMarker },
+	counterStates: { [string]: string? }, -- Track what item is on each counter
 }
 
 local Map = {}
@@ -28,40 +39,43 @@ function Map.new(mapModel: Instance): MapType
 
 	local baseCFrame = mapBase.CFrame
 	local shapes: { [string]: MapShape } = {}
+	local counters: { [string]: MapShape } = {}
+	local ingredientBoxes: { [string]: MapShape } = {}
+	local spawns: { [string]: SpawnMarker } = {}
+	local counterStates: { [string]: string? } = {}
 
-	local shapeCount = 0
-	for _, child in mapModel:GetChildren() do
-		if not child:IsA("BasePart") or child.Name == "MAPBASE" then
-			continue
+	-- Helper function to create a shape from a part
+	local function createShapeFromPart(part: BasePart, namePrefix: string, counter: number): MapShape?
+		local shapeAttribute = part:GetAttribute("Shape")
+		if not shapeAttribute or (shapeAttribute ~= "Box" and shapeAttribute ~= "Circle") then
+			warn(`Part {part.Name} missing or invalid Shape attribute`)
+			return nil
 		end
 
-		shapeCount += 1
-		local part = child :: BasePart
 		local localCFrame = baseCFrame:ToObjectSpace(part.CFrame)
-
 		-- 2D position: 3D X -> 2D X, 3D -Z -> 2D Y
 		local pos2D = Vector2.new(localCFrame.Position.X, -localCFrame.Position.Z)
 
-		if part.Name == "Circle" then
+		if shapeAttribute == "Circle" then
 			-- Use average of X and Z size for radius
 			local radius = (part.Size.X + part.Size.Z) / 4
-			shapes[`Circle{shapeCount}`] = {
+			return {
 				shape = "Circle",
 				position = pos2D,
 				radius = radius,
 			}
-		elseif part.Name == "Box" then
+		else -- Box
 			-- 2D size: X and Z from 3D
 			local size2D = Vector2.new(part.Size.X, part.Size.Z)
 
 			-- Rotation around Y axis (3D) -> 2D rotation (CCW)
 			local _, rotY, _ = localCFrame:ToOrientation()
-			local rotDeg = math.deg(rotY) -- Negate for CCW convention
+			local rotDeg = math.deg(rotY)
 
 			-- Snap rotation to 5 degree increments to avoid floating point errors
 			rotDeg = math.round(rotDeg / 5) * 5
 
-			shapes[`Box{shapeCount}`] = {
+			return {
 				shape = "Box",
 				position = pos2D,
 				size = size2D,
@@ -70,10 +84,111 @@ function Map.new(mapModel: Instance): MapType
 		end
 	end
 
-	print(shapes)
+	-- Process Interactables
+	local interactables = mapModel:FindFirstChild("Interactables")
+	if interactables then
+		-- Process Counters
+		local countersFolder = interactables:FindFirstChild("Counters")
+		if countersFolder then
+			-- Sort parts by name for deterministic ordering
+			local counterParts = {}
+			for _, counterPart in countersFolder:GetChildren() do
+				if counterPart:IsA("BasePart") then
+					table.insert(counterParts, counterPart)
+				end
+			end
+			table.sort(counterParts, function(a, b)
+				return a.Name < b.Name
+			end)
+
+			local counterCount = 0
+			for _, counterPart in counterParts do
+				counterCount += 1
+				local shape = createShapeFromPart(counterPart, "Counter", counterCount)
+				if shape then
+					-- Use deterministic ID based on name and position
+					local localCFrame = baseCFrame:ToObjectSpace(counterPart.CFrame)
+					local pos2D = Vector2.new(localCFrame.Position.X, -localCFrame.Position.Z)
+					local counterId = `{counterPart.Name}_{math.floor(pos2D.X * 100)}_{math.floor(pos2D.Y * 100)}`
+					counters[counterId] = shape
+					counterStates[counterId] = nil -- Initialize as empty
+					print(`Added counter: {counterId}`)
+				end
+			end
+		end
+
+		-- Process IngredientBoxes
+		local ingredientBoxesFolder = interactables:FindFirstChild("IngredientBoxes")
+		if ingredientBoxesFolder then
+			local ingredientCount = 0
+			for _, ingredientPart in ingredientBoxesFolder:GetChildren() do
+				if ingredientPart:IsA("BasePart") then
+					ingredientCount += 1
+					local shape = createShapeFromPart(ingredientPart, ingredientPart.Name, ingredientCount)
+					if shape then
+						-- Store with unique key but preserve ingredient name
+						local ingredientShape: IngredientBox = shape :: IngredientBox
+						ingredientShape.ingredientName = ingredientPart.Name
+						ingredientBoxes[`{ingredientPart.Name}{ingredientCount}`] = ingredientShape
+						print(`Added ingredient box: {ingredientPart.Name}{ingredientCount}`)
+					end
+				end
+			end
+		end
+	end
+
+	-- Process Markers (Spawns)
+	local markers = mapModel:FindFirstChild("Markers")
+	if markers then
+		local spawnsFolder = markers:FindFirstChild("Spawns")
+		if spawnsFolder then
+			local spawnCount = 0
+			for _, spawnPart in spawnsFolder:GetChildren() do
+				if spawnPart:IsA("BasePart") then
+					spawnCount += 1
+					local localCFrame = baseCFrame:ToObjectSpace(spawnPart.CFrame)
+					local pos2D = Vector2.new(localCFrame.Position.X, -localCFrame.Position.Z)
+					local _, rotY, _ = localCFrame:ToOrientation()
+					local rotDeg = math.deg(rotY)
+
+					spawns[`{spawnPart.Name}{spawnCount}`] = {
+						team = spawnPart.Name,
+						position = pos2D,
+						rotation = rotDeg,
+					}
+					print(`Added spawn: {spawnPart.Name}{spawnCount} at {pos2D}`)
+				end
+			end
+		end
+	end
+
+	-- Process Parts (regular collision shapes)
+	local partsFolder = mapModel:FindFirstChild("Parts")
+	if partsFolder then
+		local partCount = 0
+		for _, part in partsFolder:GetChildren() do
+			if part:IsA("BasePart") then
+				partCount += 1
+				local shape = createShapeFromPart(part, part.Name, partCount)
+				if shape then
+					shapes[`{part.Name}{partCount}`] = shape
+				end
+			end
+		end
+	end
+
+	print("Map loaded:")
+	print("- Shapes:", shapes)
+	print("- Counters:", counters)
+	print("- IngredientBoxes:", ingredientBoxes)
+	print("- Spawns:", spawns)
 
 	return setmetatable({
 		shapes = shapes,
+		counters = counters,
+		ingredientBoxes = ingredientBoxes,
+		spawns = spawns,
+		counterStates = counterStates,
 	}, Map)
 end
 
@@ -211,7 +326,29 @@ function Map.sweepCircle(
 		local minT = 1
 		local hitNormal: Vector2? = nil
 
+		-- Check collision against all collidable objects
+		-- Regular map shapes
 		for _, shape in map.shapes do
+			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, shape)
+			if hit and t < minT then
+				minT = t
+				hitNormal = normal
+				anyCollision = true
+			end
+		end
+
+		-- Counter shapes
+		for _, shape in map.counters do
+			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, shape)
+			if hit and t < minT then
+				minT = t
+				hitNormal = normal
+				anyCollision = true
+			end
+		end
+
+		-- Ingredient box shapes
+		for _, shape in map.ingredientBoxes do
 			local hit, t, normal = sweepAgainstShape(radius, currentPos, remainingTravel, shape)
 			if hit and t < minT then
 				minT = t
@@ -229,16 +366,33 @@ function Map.sweepCircle(
 
 		-- Slide along surface
 		remainingTravel = remainingTravel * (1 - minT)
-		local normalDot = remainingTravel:Dot(hitNormal)
-		if normalDot < 0 then
-			remainingTravel = remainingTravel - hitNormal * normalDot
-		end
+		if hitNormal then
+			local normalDot = remainingTravel:Dot(hitNormal)
+			if normalDot < 0 then
+				remainingTravel = remainingTravel - hitNormal * normalDot
+			end
 
-		-- Small nudge away from surface to prevent getting stuck
-		currentPos = currentPos + hitNormal * 0.001
+			-- Small nudge away from surface to prevent getting stuck
+			currentPos = currentPos + hitNormal * 0.001
+		end
 	end
 
 	return anyCollision, currentPos
+end
+
+-- Counter state management methods
+function Map.setCounterItem(map: MapType, counterId: string, item: string?)
+	if map.counterStates[counterId] ~= nil then -- Counter exists
+		map.counterStates[counterId] = item
+	end
+end
+
+function Map.getCounterItem(map: MapType, counterId: string): string?
+	return map.counterStates[counterId]
+end
+
+function Map.getCounterStates(map: MapType): { [string]: string? }
+	return map.counterStates
 end
 
 return Map
