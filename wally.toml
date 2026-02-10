@@ -9,3 +9,4 @@ ProfileStore="lm-loleris/profilestore@1.0.2"
 
 [dependencies]
 Loader = "sleitnick/loader@2.0.0"
+Signal = "data-oriented-house/lemonsignal@1.11.0"

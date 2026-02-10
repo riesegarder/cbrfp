@@ -1,5 +1,5 @@
 --[[
-	Does 
+	Does nothing atm.
 ]]
 local Camera = workspace.CurrentCamera
 local CameraController = {}
