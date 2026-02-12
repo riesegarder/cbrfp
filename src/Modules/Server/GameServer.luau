@@ -1,20 +1,30 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PlayersManager = require(script.Parent.PlayersManager)
-local World = require(ReplicatedStorage.Source.Shared.World)
+local WorldServer = require(script.Parent.WorldServer)
 local GameServer = {}
 
-local world = World.new()
+local playerRecords = {}
 
 function GameServer._onPlayerAdded(player: Player, sessionId: number)
-	world:addEntity("Character", {playerSessionId = sessionId})
+	local playerRecord = {
+		playerSessionId = sessionId,
+	}
+	playerRecords[sessionId] = playerRecord
+
+	local charEntityId = WorldServer:SpawnCharacter(sessionId)
+	playerRecord.charEntityId = charEntityId
 end
 
 function GameServer._onPlayerRemoving(player: Player, sessionId: number)
+	playerRecords[sessionId] = nil
+	WorldServer:DespawnCharacter(sessionId)
+end
+
+function GameServer.ReceiveInput()
 
 end
 
 function GameServer.Init()
-
+	
 end
 
 function GameServer.Start()

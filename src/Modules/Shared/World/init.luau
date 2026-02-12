@@ -1,3 +1,9 @@
+--[[
+	World
+
+	Shared game world simulation
+	Should be deterministic, so given the same inputs, should arrive at the exact same state
+]]
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Loader = require(ReplicatedStorage.Packages.Loader)
 local World = {}
@@ -14,6 +20,10 @@ function World.new()
 		entities = {}, -- everything is an entity, this is the main "state" table for the whole thing
 		-- entities: {[entityId (number)]: entityData (table with key-value pairs of all entity data)}
 
+		-- this is a local cache that shouldn't get replicated
+		-- great for fast lookups
+		entityMap = {},
+
 		lastId = 0, -- entity id counter to prevent collisions
 	}
 	setmetatable(self, World)
@@ -21,6 +31,7 @@ function World.new()
 end
 
 -- this should really only happen for characters, right?
+-- yeah, should really only be for characters
 function World.ProcessInput(self, entityId: number, input)
 	local entity = self.entities[entityId]
 	if not entity then
@@ -42,13 +53,22 @@ function World.AddEntity(self, entityType: string, data: any, isPredicted: boole
 	if isPredicted then
 		lastPredictedId -= 1
 		entityId = lastPredictedId
-	else 
-		self.lastId += 1 
+	else
+		self.lastId += 1
 		entityId = self.lastId
 	end
 
-	local newEntity = entityModule.create(self, data, entityId)
+	local newEntity = entityModule.create(self, data)
+	newEntity.entityType = entityType
+	newEntity.entityId = entityId
 	self.entities[entityId] = newEntity
+	local entityMap = self.entityMap[entityType]
+	if not entityMap then
+		entityMap = {}
+		self.entityMap[entityType] = entityMap
+	end
+	entityMap[entityId] = newEntity
+
 	if isPredicted then
 		predictedEntityCache[entityId] = newEntity
 	end
@@ -56,8 +76,17 @@ function World.AddEntity(self, entityType: string, data: any, isPredicted: boole
 	return entityId
 end
 
-function World.Destroy(self)
-	
+function World.RemoveEntity(self, entityId)
+	local entity = self.entities[entityId]
+	if not entity then
+		return
+	end
+	local entityType = entity.entityType
+	local entityMap = self.entityMap[entityType]
+	self.entities[entityId] = nil
+	entityMap[entityId] = nil
 end
+
+function World.Destroy(self) end
 
 return World

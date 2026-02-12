@@ -1,16 +1,20 @@
+--[[
+	Character entity type
+
+	Characters may be player or AI controlled!
+]]
 local Character = {}
 
 function Character.create(world, data, id)
 	local char = {
-		entityType = script.Name,
-		position = data.spawnPosition or Vector2.new(0, 0),
-		rotation = data.spawnRotation or 0,
+		position = data.position or Vector2.new(0, 0),
+		rotation = data.rotation or 0,
 		radius = 0.45,
-		moveSpeed = 3, 
+		moveSpeed = 3,
 		t = 0,
 		frame = 0,
 
-		player = data.playerSessionId,
+		playerSessionId = data.playerSessionId,
 	}
 	return char
 end
